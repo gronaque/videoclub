@@ -2,6 +2,9 @@
 #Config.set('graphics', 'fullscreen', 'auto')
 #Config.set('graphics', 'borderless', '1')
 
+from kivy.config import Config
+Config.set('graphics', 'fullscreen', 'auto')  # ou '1' pour forcer plein écran
+
 import os
 from kivy.app import App
 from kivy.uix.screenmanager import ScreenManager, Screen
@@ -22,16 +25,78 @@ from kivy.uix.screenmanager import Screen
 from kivy.animation import Animation
 import os
 import random
+
 from kivy.uix.floatlayout import FloatLayout
+
+import ctypes
+from kivy.core.window import Window
+import ctypes.wintypes
+
+def move_window_to_second_monitor():
+    user32 = ctypes.windll.user32
+    monitors = []
+
+    def monitor_enum_proc(hMonitor, hdcMonitor, lprcMonitor, dwData):
+        rct = ctypes.cast(lprcMonitor, ctypes.POINTER(ctypes.wintypes.RECT)).contents
+        monitors.append((rct.left, rct.top))
+        return 1
+
+    MonitorEnumProc = ctypes.WINFUNCTYPE(
+        ctypes.c_int,
+        ctypes.c_ulong,
+        ctypes.c_ulong,
+        ctypes.c_ulong,
+        ctypes.c_double,
+    )
+    enum_func = MonitorEnumProc(monitor_enum_proc)
+    user32.EnumDisplayMonitors(0, 0, enum_func, 0)
+
+    if len(monitors) >= 2:
+        second_monitor_pos = monitors[1]
+        Window.left = second_monitor_pos[0]
+        Window.top = second_monitor_pos[1]
+
 
 
 FILM_FOLDER = "films"  # dossier où sont stockés les dossiers films
 
 # Fixe une taille par défaut pour les tests sur ordinateur
-Window.size = (600, 1024)
+# Window.size = (600, 1024)
 
 class ClickableImage(ButtonBehavior, Image):
     pass
+
+class MyApp(App):
+    def on_start(self):
+        # Attend une fraction de seconde que la fenêtre soit prête
+        Clock.schedule_once(self.move_to_second_screen, 0.5)
+
+    def move_to_second_screen(self, *args):
+        try:
+            user32 = ctypes.windll.user32
+            user32.SetProcessDPIAware()
+            monitors = []
+
+            def callback(hMonitor, hdcMonitor, lprcMonitor, dwData):
+                r = ctypes.wintypes.RECT()
+                user32.GetMonitorInfoW(hMonitor, ctypes.byref(r))
+                monitors.append((r.left, r.top))
+                return 1
+
+            MONITORENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong, ctypes.POINTER(ctypes.wintypes.RECT), ctypes.c_double)
+            user32.EnumDisplayMonitors(0, 0, MONITORENUMPROC(callback), 0)
+
+            if len(monitors) > 1:
+                second_monitor_pos = monitors[1]
+                Window.top = second_monitor_pos[1]
+                Window.left = second_monitor_pos[0]
+                Window.fullscreen = True
+            else:
+                print("Un seul écran détecté.")
+
+        except Exception as e:
+            print("Erreur déplacement écran :", e)
+
 
 def charger_films_par_annees():
     films = []
@@ -161,6 +226,7 @@ class BaseScreen4(Screen):
 
 class IntroScreen(BaseScreen):
     def on_enter(self):
+        move_window_to_second_monitor()  # Appel direct si défini dans le même fichier
         Clock.schedule_once(self.goto_menu, 0)
 
     def goto_menu(self, dt):
@@ -630,18 +696,18 @@ class ArtistesScreen(BaseScreen3):
             img_path = os.path.join(first["folder_path"], "affiche.jpg")
             if os.path.isfile(img_path):
                 img = ClickableImage(source=img_path, size_hint_y=None, height=200)
-                img.bind(on_release=lambda instance, films=films: self.show_films(films))
+                img.bind(on_release=lambda instance, films=films, titre=entier: self.show_films(films, titre))
                 box.add_widget(label)
                 box.add_widget(img)
                 self.grid.add_widget(box)
 
-    def show_films(self, films):
+    def show_films(self, films, titre):
         if self.manager.has_screen("category_grid"):
             self.manager.remove_widget(self.manager.get_screen("category_grid"))
-        grid_screen = CategoryGridScreen(films, name="category_grid")
-        if not self.manager.has_screen("category_grid"):
-            self.manager.add_widget(grid_screen)
+        grid_screen = CategoryGridScreen(films, name="category_grid", titre=titre, previous_screen="categorie_choix")
+        self.manager.add_widget(grid_screen)
         self.manager.current = "category_grid"
+
 
 
 class VideoclubApp(App):
@@ -771,18 +837,18 @@ class CategoriesScreen(BaseScreen2):
             img_path = os.path.join(first["folder_path"], "affiche.jpg")
             if os.path.isfile(img_path):
                 img = ClickableImage(source=img_path, size_hint_y=None, height=200)
-                img.bind(on_release=lambda instance, films=films: self.show_films(films))
+                img.bind(on_release=lambda instance, films=films, cat=cat: self.show_films(films, cat))
                 box.add_widget(label)
                 box.add_widget(img)
                 self.grid.add_widget(box)
 
-    def show_films(self, films):
+    def show_films(self, films, titre):
         if self.manager.has_screen("category_grid"):
             self.manager.remove_widget(self.manager.get_screen("category_grid"))
-        grid_screen = CategoryGridScreen(films, name="category_grid")
-        if not self.manager.has_screen("category_grid"):
-            self.manager.add_widget(grid_screen)
+        grid_screen = CategoryGridScreen(films, name="category_grid", titre=titre, previous_screen="categorie_choix")
+        self.manager.add_widget(grid_screen)
         self.manager.current = "category_grid"
+
 
 
 from kivy.uix.behaviors import DragBehavior
