@@ -448,7 +448,7 @@ class CategoryGridScreen(BaseScreen3):
         fiche_screen.afficher_fiche(film, previous_screen=self.name)
         self.manager.current = "fiche_film"
 
-    def __init__(self, films, previous_screen="categorie_choix", **kwargs):
+    def __init__(self, films, previous_screen="categorie_choix", titre="", **kwargs):
         super().__init__(**kwargs)
         self.previous_screen = previous_screen
 
@@ -459,13 +459,28 @@ class CategoryGridScreen(BaseScreen3):
         btn_back.background_normal = ''  # désactive l’image de fond par défaut
         btn_back.background_color = (1, 1, 1, 0.5)
         btn_back.font_name = 'assets/titres.ttf'
-        btn_back.font_size = 35  # taille de police, par exemple 24 pixels
+        btn_back.font_size = 35
         btn_back.color = (0, 0, 0, 1)
         btn_back.bind(on_release=self.go_back)
         anchor = AnchorLayout(anchor_x='left', anchor_y='top', size_hint=(1, None), height=60)
         anchor.add_widget(btn_back)
         layout.add_widget(anchor)
 
+        # Titre
+        self.titre_label = Label(
+            text=titre,
+            font_size=30,
+            bold=True,
+            halign='center',
+            valign='middle',
+            size_hint=(1, None),
+            height=60,
+            color=(1, 1, 1, 1)
+        )
+        self.titre_label.bind(size=lambda lbl, val: setattr(lbl, 'text_size', val))
+        layout.add_widget(self.titre_label)
+
+        # Grille
         scroll = ScrollView(size_hint=(1, 0.9))
         self.grid = GridLayout(cols=3, spacing=10, size_hint_y=None)
         self.grid.bind(minimum_height=self.grid.setter('height'))
@@ -484,11 +499,6 @@ class CategoryGridScreen(BaseScreen3):
     def go_back(self, instance):
         self.manager.current = self.previous_screen
 
-
-    
-
-
-
     def next_film(self):
         self.index += 1
         self.show_film()
@@ -496,6 +506,7 @@ class CategoryGridScreen(BaseScreen3):
     def previous_film(self):
         self.index -= 1
         self.show_film()
+
 
 
 class CategorieChoixScreen(BaseScreen2):
