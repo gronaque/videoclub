@@ -925,65 +925,101 @@ class AnneesScreen(Screen):
         # self.manager.get_screen('films_par_annees').set_annee(annee)
         # self.manager.current = 'films_par_annees'
 
-class FilmsParAnneeScreen(Screen):
+class FilmsParAnneeScreen(BaseScreen3):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.films = []
-        self.annees = []
-        self.index_annee = 0
-        self._start_touch_x = None
+        self.layout = BoxLayout(orientation='vertical')
 
-        self.layout = BoxLayout(orientation='vertical', spacing=10, padding=10)
-        self.label = Label(text="", font_size=24, size_hint=(1, 0.1))
-        self.layout.add_widget(self.label)
+        # Bouton retour
+        btn_back = Button(text="<", size_hint=(None, None), size=(50, 50))
+        btn_back.background_normal = ''
+        btn_back.background_color = (1, 1, 1, 0.5)
+        btn_back.font_name = 'assets/titres.ttf'
+        btn_back.font_size = 35
+        btn_back.color = (0, 0, 0, 1)
+        btn_back.bind(on_release=self.go_back)
 
+        from kivy.uix.anchorlayout import AnchorLayout
+        anchor = AnchorLayout(anchor_x='left', anchor_y='top', size_hint=(1, None), height=60)
+        anchor.add_widget(btn_back)
+        self.layout.add_widget(anchor)
+
+        self.titre_label = Label(
+            text="",
+            font_size=30,
+            bold=True,
+            halign='center',
+            valign='middle',
+            size_hint=(1, None),
+            height=60,
+            color=(1, 1, 1, 1)
+        )
+        self.titre_label.bind(size=lambda lbl, val: setattr(lbl, 'text_size', val))
+        self.layout.add_widget(self.titre_label)
+# Test
+        self.titre_label.text = "Test"
+
+        # ScrollView + Grille
         self.scroll = ScrollView(size_hint=(1, 0.9))
-        self.grid = GridLayout(cols=2, spacing=10, size_hint_y=None)
+        self.grid = GridLayout(cols=2, spacing=[10, 30], size_hint_y=None, padding=10)
         self.grid.bind(minimum_height=self.grid.setter('height'))
         self.scroll.add_widget(self.grid)
         self.layout.add_widget(self.scroll)
 
         self.add_widget(self.layout)
 
+        # Données
+        self.annees = []
+        self.index_annee = 0
+        self._start_touch_x = None
+
+    def go_back(self, instance):
+        self.manager.current = "menu_annees"
+
     def charger_films_par_annees(self, annee):
-        self.films = charger_films_par_annees()
-        self.annees = sorted(list(set(f["annee"] for f in self.films)))
+        self.grid.clear_widgets()
+        all_films = self.manager.get_screen("all_films").load_films_from_folder()
+
+        # Construction de la liste des années
+        self.annees = sorted(set(f.get("annee", "").strip() for f in all_films if f.get("annee", "").strip()))
         if annee in self.annees:
             self.index_annee = self.annees.index(annee)
         else:
             self.index_annee = 0
-        self.afficher_films()
 
-    def afficher_films(self):
-        self.grid.clear_widgets()
-        if not self.annees:
-            self.label.text = "Aucune année disponible"
-            return
-
-        annee = self.annees[self.index_annee]
-        self.label.text = f"Films de l'année {annee}"
-        films_annee = [f for f in self.films if f["annee"] == annee]
+        annee_courante = self.annees[self.index_annee]
+        self.titre_label.text = annee_courante
+        films_annee = [f for f in all_films if f.get("annee", "").strip() == annee_courante]
 
         for film in films_annee:
-            img_path = os.path.join(film["chemin"], "affiche.jpg")
+            img_path = os.path.join(film["folder_path"], "affiche.jpg")
             if os.path.isfile(img_path):
-                box = BoxLayout(orientation='vertical', size_hint=(None, None), size=(200, 250), padding=5)
+                img = ClickableImage(
+                    source=img_path,
+                    size_hint_y=None,
+                    height=250,
+                    allow_stretch=True,
+                    keep_ratio=True
+                )
+                img.bind(on_release=lambda instance, film=film: self.ouvrir_fiche(film))
 
-                label = Label(text=film["titre"], size_hint=(1, 0.2), halign='center', valign='middle', color=(0, 0, 0, 1))
-                label.bind(size=lambda lbl, val: setattr(lbl, 'text_size', val))
-
-                img = Image(source=img_path, allow_stretch=True, keep_ratio=True, size_hint=(1, 0.8))
-
+                box = BoxLayout(
+                    orientation='vertical',
+                    size_hint_y=None,
+                    height=250,
+                    padding=5
+                )
                 box.add_widget(img)
-                box.add_widget(label)
-
-                btn = Button(background_normal='', background_down='', size_hint=(None, None), size=(200, 250))
-                btn.add_widget(box)
-                btn.bind(on_release=lambda instance, chemin=film["chemin"]: self.ouvrir_fiche(chemin))
-
-                self.grid.add_widget(btn)
+                self.grid.add_widget(box)
 
 
+    def ouvrir_fiche(self, film):
+        self.manager.get_screen("fiche_film").afficher_fiche(film)
+        self.manager.current = "fiche_film"
+
+
+
+    # --- Swipe ---
     def on_touch_down(self, touch):
         self._start_touch_x = touch.x
         return super().on_touch_down(touch)
@@ -1002,16 +1038,13 @@ class FilmsParAnneeScreen(Screen):
     def annee_precedente(self):
         if self.index_annee > 0:
             self.index_annee -= 1
-            self.afficher_films()
+            self.charger_films_par_annees(self.annees[self.index_annee])
 
     def annee_suivante(self):
         if self.index_annee < len(self.annees) - 1:
             self.index_annee += 1
-            self.afficher_films()
+            self.charger_films_par_annees(self.annees[self.index_annee])
 
-    def ouvrir_fiche(self, chemin):
-        # Implémente la logique pour ouvrir la fiche détaillée du film
-        pass
 
 
 class MenuAnnees(BaseScreen3):
